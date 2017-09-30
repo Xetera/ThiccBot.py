@@ -2230,9 +2230,9 @@ to look at the weather details of.""", expire_in=30)
             await self.safe_delete_message(selection)
             print("Map changed to" + world + " by " + str(author))
 
-    async def cmd_imgur(self, player, author, channel, server):
+    async def cmd_imgur(self, player, author, channel, server, search=False):
         import requests
-        import pprint
+        import json
         """
         Usage:
             {command_prefix}imgur (search) (album)
@@ -2246,7 +2246,24 @@ to look at the weather details of.""", expire_in=30)
         header = {'authorization': 'Client-ID ' + CLIENT_ID}
         auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
 
-        r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=auth_header)
+        r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=self.header)
+        parse = json.loads(r.text)
+        data = parse["data"]
+        if parse["success"] == True:
+            print("Successfully loaded.")
+            albums_title = []
+            albums_id = []
+            print("\n" + "Albums found:")
+            for i, title in enumerate(d['title'] for d in data):
+                albums_title.append(title)
+                print(title)
+            for i, id in enumerate(d['id'] for d in data):
+                albums_id.append(id)
+            global albums
+            albums = dict(zip(albums_title, albums_id))
+            print(albums)
+        else:
+            print("There's been a problem getting album data.")
 
 
 
