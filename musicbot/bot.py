@@ -2233,37 +2233,64 @@ to look at the weather details of.""", expire_in=30)
     async def cmd_imgur(self, player, author, channel, server, search=False):
         import requests
         import json
+
         """
         Usage:
             {command_prefix}imgur (search) (album)
 
-        Sends random pic to channel from (album)
+        Include only one:
+            album: Sends random pic to channel from known album name (album)
+            search: Searches album names and lets user select, sends random pic to channel
         """
 
-        album = None
-        CLIENT_ID = "c3a1e4d2c729d75"
-        ACCESS_TOKEN = '31e4e81dd7f6e38443dbb9d05219f074afacd1ad'
-        header = {'authorization': 'Client-ID ' + CLIENT_ID}
-        auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
+        @staticmethod
+        class Imgur:
+            album = None
+            search = None
+            CLIENT_ID = "c3a1e4d2c729d75"
+            ACCESS_TOKEN = '31e4e81dd7f6e38443dbb9d05219f074afacd1ad'
+            header = {'authorization': 'Client-ID ' + CLIENT_ID}
+            auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
+            albums_title = []
+            albums_id = []
 
-        r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=self.header)
-        parse = json.loads(r.text)
-        data = parse["data"]
-        if parse["success"] == True:
-            print("Successfully loaded.")
+        async def send_message(string):
+            await self.safe_send_message(channel, string, expire_in=20)
+
+        if Imgur.search:
+            #Searches for
+            r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=Imgur.header)
+            albumparse = json.loads(r.text)
+            data = albumparse["data"]
+            for i, k, v in enumerate(data):
+                if k == 'success':
+                    if v:
+                        send_message("Successfully loaded.")
+                    else:
+                        send_message("ERROR: There was a problem accessing the album information on Imgur,"
+                                                              "printing JSON response.")
+                        await self.safe_send_message(channel, data)
+                elif k != 'success' and i == len(data)-1:
+                    send_message("FATAL ERROR: Discord was not able to send a request to Imgur. Check access token/API status.")
+                    return 0
+
             albums_title = []
             albums_id = []
             print("\n" + "Albums found:")
             for i, title in enumerate(d['title'] for d in data):
                 albums_title.append(title)
-                print(title)
+                print(i + title)
             for i, id in enumerate(d['id'] for d in data):
                 albums_id.append(id)
-            global albums
             albums = dict(zip(albums_title, albums_id))
             print(albums)
-        else:
-            print("There's been a problem getting album data.")
+        elif Imgur.album:
+            #TODO: directly looking through an album instead of searching
+            return
+
+        elif Imgur.album and Imgur.search:
+            #both arguments can't both be present
+            send_message("Can not use both arguments in Imgur function.")
 
 
 
