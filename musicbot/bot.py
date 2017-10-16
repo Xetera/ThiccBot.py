@@ -15,6 +15,9 @@ from discord.object import Object
 from discord.enums import ChannelType
 from discord.voice_client import VoiceClient
 from discord.ext.commands.bot import _get_variable
+from discord import client
+from discord import embeds
+
 
 from io import BytesIO
 from functools import wraps
@@ -65,6 +68,7 @@ class Response:
 
 
 class MusicBot(discord.Client):
+
     def __init__(self, config_file=ConfigDefaults.options_file, perms_file=PermissionsDefaults.perms_file):
         self.players = {}
         self.the_voice_clients = {}
@@ -2004,6 +2008,7 @@ class MusicBot(discord.Client):
                 print("[config:autopause] Pausing")
                 self.server_specific_data[after.server]['auto_paused'] = True
                 player.pause()
+        
 
     async def on_server_update(self, before: discord.Server, after: discord.Server):
         if before.region != after.region:
@@ -2011,10 +2016,16 @@ class MusicBot(discord.Client):
 
             await self.reconnect_voice_client(after)
 
+
+######################################################
+################### My Commands ######################
+######################################################
+
+
     async def cmd_weather(self, channel, author):
         import json
         from array import array
-        import urllib.request, urllib.error, urllib.parse
+        import requests
         from collections import OrderedDict
         from pprint import pprint
         api_key = "&APPID=507e30d896f751513350c41899382d89"
@@ -2030,16 +2041,17 @@ class MusicBot(discord.Client):
             }
 
         def connectapi():
-
             global parsed
             global data
             global urlrequest
             urlrequest = city_name_url + str_city_input + units + api_key
-            response = urllib.request.urlopen(urlrequest)
-            content = response.read()
+            response = requests.get(urlrequest)
+            content = json.loads(response.text)
+
 
             data = json.loads(content.decode('utf8'), object_pairs_hook=OrderedDict)
             parsed = json.dumps(data, indent=4, sort_keys=True)
+            return content
 
 
         def find_data():
@@ -2049,9 +2061,8 @@ class MusicBot(discord.Client):
             global general_info
             global weather_description
             global formatted_general_info
-            city_name = str(data['name'])
+            city_name = data['name']
             country_name = str(data['sys']['country'])
-            #weather_description = data['weather']['description']
             for key, value in data['main'].items():
                if key == "humidity":
                     general_info['Humidity (%)'] = value
@@ -2071,7 +2082,7 @@ class MusicBot(discord.Client):
             global formatted_general_info
             innerlines = '\n'.join('%s:%s' % (k, v) for k, v in general_info.items())
             formatted_general_info = (str(innerlines).replace("{", "").replace("}", ""))
-            return """      
+            return """      \
 \t\t        %s
 \t\t        """ % formatted_general_info
         await self.send_typing(channel)
@@ -2083,14 +2094,15 @@ to look at the weather details of.""", expire_in=30)
             global str_city_input
             city_input = await self.wait_for_message(20, author=author, channel=channel)
             if not city_input:
-                return Response("Maybe you should stop being a filthy nigger and actually write a city name, "+ str(author) +".",
+                return Response("There was no response from "+ str(author) +".",
                                 delete_after=60)
             elif city_input.content.startswith(self.config.command_prefix) or \
                     city_input.content.lower().startswith('exit'):
                 break
             else:
                 str_city_input = city_input.content.strip()
-                connectapi()
+                await self.safe_send_message(channel, connectapi())
+
             try:
                 if 'name' in data:
                     find_data()
@@ -2104,6 +2116,48 @@ to look at the weather details of.""", expire_in=30)
             except Exception as e:
                 raise exceptions.CommandError(e, expire_in=20)
 
+    async def cmd_coin(self, channel,author):
+        import random
+
+        flip = ["Heads", "Tails"]
+
+        randnumber = random.randrange(0, 2)
+
+        cards = [':dollar:', ':yen:', ':euro:', ':pound:']
+        hand = await self.send_message(channel, ' '.join(cards))
+        await asyncio.sleep(0.6)
+
+        for x in range(4):
+            shuffle(cards)
+            await self.safe_edit_message(hand, ' '.join(cards))
+            await asyncio.sleep(0.6)
+        await self.safe_delete_message(hand, quiet=True)
+
+        return Response("{} flipped: {}".format(author.name, flip[randnumber]), delete_after=30)
+
+################ TRANSLATE ####################################################################
+    async def cmd_translate(self, author, channel, user_input, leftover_args):
+        """
+        Usage:
+            {cmd_prefix}translate [user_input]
+
+        """
+        if not user_input:
+            raise exceptions.CommandError(
+                "Usage: \n !translate [message] \n\nTranslates message to English.")
+
+        user_input = ' '.join([user_input, *leftover_args])
+
+        from googletrans import Translator
+        translator = Translator()
+
+
+        #print(type(text))
+
+        detection = translator.detect(user_input)
+        text = translator.translate(user_input)
+        return Response(str(detection) + "\n" + str(text))
+
 
     async def cmd_testme(self,channel):
         await self.safe_send_message(channel, "MY NIGGAS", expire_in=20)
@@ -2111,16 +2165,190 @@ to look at the weather details of.""", expire_in=30)
     async def cmd_report(self, channel):
         await self.safe_send_message(channel, "Fuck you Weien.", expire_in=20)
 
-    async def cmd_weien(self, channel):
-        await self.safe_send_message(channel, "A highly autistic child from fake China, sucks at tetris and my dick as well.", expire_in=20)
+    async def on_voice_state_update(self)
+    weien_questions = ["Weien's _______ is very small.",
+                       "Weien's mom is a _______.",
+                       "Weien's dad is a _______.",
+                       "Weien's brother doesn't _______.",
+                       "Weien learned _______ in switzerland",
+                       "Weien's family makes ______ dollars a year.",
+                       "Weien is attracted to _______",
+                       "Weien is commonly classified as a ______",
+                       "Weien is from _______"
+                       ]
 
+    weien_answers = ["dick",
+                     "whore",
+                     "spy",
+                     "exist",
+                     "nothing",
+                     "700k",
+                     "men",
+                     "kid",
+                     "china"
+                     ]
+
+    weien_correct = ["Did you know that Weien's penis is the only thing in the universe that is smaller than the plank lenght?",
+                     "She has been crowned the elitest whore of Taiwan for 12 years in a row now. Impressive!",
+                     "One of the more widely-known trivias. Weien's dad works as a Taiwanese national spy with embassador/trader being his "
+                        "cover to avoid being detected by the Bulgarian and Mexican governments.",
+                     "There has not been a single documented sighting of Weien's brother, officially making him the most "
+                        "elusive mythical creature to date.",
+                     "He could have learned a little bit of German as it is the country's national language but instead he chose "
+                        "to learn nothing.",
+                     "Because of the recent re-settlement, his family's income has gone down from $1M a year to 700k, however "
+                        "that number is projected to rise back to the previous amount in the upcoming months.",
+                     "Even though he has previously had relationships with women, there is a consensus within the scientific "
+                        "community confirming his homosexuality.",
+                     "One of the first member of the Genus:Easy, Species: Kids.  Weien Chen has made several breakthroughs in "
+                        "kidology by studying himself while playing games.",
+                     "Although thought to be from Taiwan, Weien Chen is actually a proud citizen of mainland China, as seen by his "
+                        "immense wealth."
+                     ]
+
+    async def cmd_weien(self, channel, author):
+        import random
+        number = random.randrange(0, len(self.weien_questions))
+
+        question_selection = self.weien_questions[number]
+        answer_selection = self.weien_answers[number]
+        correct_selection = self.weien_correct[number]
+
+        prompt = await self.safe_send_message(channel,"Fact # [" + str(number+1) +"/" +str(len(self.weien_questions)) +"]\nFill in the blanks:\n\n{}\n\n".format(question_selection),expire_in=60)
+        print(str(question_selection) + "\n" + str(answer_selection))
+
+        iter = 0
+        not_right_exists = False
+        while True:
+            answer = await self.wait_for_message(20, author=author, channel=channel)
+            if not answer:
+                if not_right_exists == True:
+                    await self.safe_delete_message(not_right)
+                return
+            elif answer.content.startswith(self.config.command_prefix):
+                await self.safe_delete_message(prompt)
+                return
+            elif answer.content == answer_selection:
+                if not_right_exists == True:
+                    await self.safe_delete_message(not_right)
+                return Response("You answered: "+ answer.content +"\n\nThat's correct! " + correct_selection)
+            else:
+                if not_right_exists == True:
+                    await self.safe_delete_message(not_right)
+                hint = answer_selection[:iter + 1]
+                if iter == 3:
+                    return Response("Wow you're a dumbass, the answer is: " + answer_selection + ".\n"
+                                    + correct_selection)
+                if question_selection == self.weien_questions[4] and answer.content == ('galician' or 'Galician'):
+                    await self.safe_send_message(channel,
+                    "You answered: "+answer.content+ "\n\nCommon misconception. The Swiss population does not actually speak Galician or require"
+                    " their citizens to learn Galician. https://en.wikipedia.org/wiki/Languages_of_Switzerland"
+                    ".\nHere's a hint: " + str(hint) + "\nHints left: " + str(2 - iter), expire_in=20)
+                    continue
+                not_right = await self.safe_send_message(channel,"You answered: "+answer.content + "\n\nNot quite right, here's a hint: " + str(hint)
+                                                 + "\nHints left: " + str(2-iter), expire_in=20)
+                not_right_exists = True
+                iter += 1
+            await self.safe_delete_message(answer)
+
+
+
+        #await self.safe_send_message(channel, "A semi-autistic retard from mainland China.", expire_in=20)
+
+
+    async def cmd_mari(self):
+        return Response("Pika Pika!")
+
+
+################COOKIES ##############################################################################################
+    async def _cmd_get_user_cookies(self):
+        pass
+
+
+    async def cmd_cookies(self, channel):
+        import sqlite3
+        from texttable import Texttable
+        from tabulate import tabulate
+        conn = sqlite3.connect('D:\\Program Files (x86)\\SQLite\\SQLiteStudio\\Discord.db')
+        c = conn.cursor()
+
+        c.execute("SELECT username, cookie_value FROM cookies ORDER BY cookie_value DESC")
+        result = c.fetchall()
+
+        table = Texttable()
+        table.set_cols_align(["l", "r"])
+        table.set_cols_valign(["m", "m"])
+        table.add_rows([["User", "Cookies"], *result])
+
+        return Response("```{}```".format(table.draw()))
+
+
+
+    async def cmd_congratz(self, channel, author, user_mentions):
+        import sqlite3
+        """
+        Usage:
+            {cmd_prefix}congratz [@user]
+
+        Congratulates the fuck out of a user.
+        """
+
+        if not user_mentions:
+            raise exceptions.CommandError(
+                "Usage: \n !congratz [@user] \n\nCongratulates the fuck out of a user.")
+
+        usr = user_mentions[0]
+        cookie_amount = 1
+
+        if usr.id == author.id:
+            return Response("Are you seriously congratulating yourself? That's pathetic, no cookies for you.", delete_after=20)
+
+        await self.safe_send_message(channel, "Wow holy shit " + usr.name +" congratulations you must feel SO good about yourself!\n\n"
+                                               + str(cookie_amount) +" :cookie: awarded.")
+
+        ## all catching of faulty input/illegal commands caught
+        #starting SQL process
+        conn = sqlite3.connect('D:\\Program Files (x86)\\SQLite\\SQLiteStudio\\Discord.db')
+        c = conn.cursor()
+        #checking for table
+
+        c.execute('CREATE TABLE IF NOT EXISTS cookies(userid INT, username TEXT, cookie_value INT)')
+        print("created table")
+        conn.commit()
+
+        c.execute('SELECT COUNT(*)FROM cookies WHERE userid == {}'.format(usr.id))
+        exists = c.execute('SELECT COUNT(*)FROM cookies WHERE userid == {}'.format(usr.id))
+        exist_return = exists.fetchone()
+        print(exist_return)
+        if exist_return[0] == 1:
+            print("User found")
+        elif exist_return[0] == 0:
+            #TODO: see if it's possible assign this a variable and use it to print out 1 to avoid looking through the db for no reason
+            c.execute('INSERT INTO cookies(userid,username,cookie_value) VALUES({}, {}, {})'.format(usr.id, "\"" + str(usr.name) + "\"", 0))
+        else:
+            error = c.execute('SELECT * FROM cookies WHERE userid = {}'. format(usr.id))
+            error = error.fetchall()[0]
+            return Response("ERROR:\n\tDEBUGGING: Multiple entries of userid were found, printing all rows\n" + str(error))
+
+        c.execute('UPDATE cookies SET cookie_value = cookie_value + {} WHERE userid = {}'.format(cookie_amount, usr.id))
+        #in case the person changed their name since the last time they used the command
+        #klkc.execute('UPDATE cookies SET username = {} WHERE userid = {}'.format(usr.name, usr.id))
+        current_cookies = c.execute('SELECT cookie_value from cookies WHERE userid = {}'.format(usr.id))
+        current_cookies = current_cookies.fetchone()[0]
+
+        await self.safe_send_message(channel, "{} has {} cookies in total".format(usr.name,current_cookies))
+        conn.commit()
+        c.close()
+        conn.close()
+
+###################### SERVER #######################################################################################
     async def cmd_server(self, channel, author):
         import subprocess
         import os
         server_running = True
 
         s = os.popen("tasklist").read()
-        if "javaw.exe" in s:
+        if "javaw.exe" or "java.exe" in s:
             await self.send_typing(channel)
             clearlist = await self.safe_send_message(channel, "Minecraft server seems to be running.", expire_in=20)
             clearlist2 = await self.safe_send_message(channel, "Would you like to restart it? (y, n)", expire_in=20)
@@ -2136,12 +2364,11 @@ to look at the weather details of.""", expire_in=30)
                 await self.safe_delete_message(clearlist)
                 await self.safe_delete_message(clearlist2)
                 if start_prompt.content.startswith("y"):
-                    p = subprocess.Popen("Minecraft_Server.bat", cwd=r"C:\\Users\\Ali\\Desktop\\Minecraft_Server",
+                    p = subprocess.Popen("newrun.bat", cwd=r"C:\\Users\\Ali\\Bukkit",
                                          shell=True)
-                    stdout, stderr = p.communicate()
                     await self.send_typing(channel)
                     s = os.popen("tasklist").read()
-                    if "javaw.exe" in s:
+                    if "javaw.exe" or "java.exe" in s:
                         await self.send_typing(channel)
                         await self.safe_send_message(channel, "Server is now running.", expire_in=20)
                     else:
@@ -2158,143 +2385,319 @@ to look at the weather details of.""", expire_in=30)
                 await self.safe_delete_message(clearlist2)
                 if start_prompt.content.startswith("y"):
                     await self.safe_send_message(channel, "Restarting server...", expire_in=5)
+                    os.system('TASKKILL /F /IM java.exe')
                     os.system('TASKKILL /F /IM javaw.exe')
-                    p = subprocess.Popen("Minecraft_Server.bat", cwd=r"C:\\Users\\Ali\\Desktop\\Minecraft_Server",
+                    p = subprocess.Popen("newrun.bat", cwd=r"C:\\Users\\Ali\\Bukkit",
                                          shell=True)
                     stdout, stderr = p.communicate()
                     await self.send_typing(channel)
                     s = os.popen("tasklist").read()
-                    if "javaw.exe" in s:
+                    if "javaw.exe" or "java.exe" in s:
                         await self.send_typing(channel)
                         await self.safe_send_message(channel, "Server was successfully restarted.", expire_in=20)
                     else:
                         await self.send_typing(channel)
                         await self.safe_send_message(channel, "Server couldn't restart.", expire_in=20)
         except AttributeError as e:
+            #shitty error handling to prevent discord from giving errors when things time out
             pass
         try:
             await self.safe_delete_message(start_prompt)
         except:
             pass
-        #await self.cmd_clean(message, server, author=author, search_range=1)
 
     async def cmd_map(self, channel, author):
         import os
-        path = "C:\\Users\\Ali\\Desktop\\Minecraft_Server"
-        address = "C:\\Users\\Ali\\Desktop\\Minecraft_Server\\server.properties"
+        path = "C:\\Users\\Ali\\Bukkit"
+        address = "C:\\Users\\Ali\\Bukkit\\server.properties"
         fread = open(address, 'r')
         lines = fread.readlines()
 
         fread = open(address)
         for i, line in enumerate(fread):
-            if i == 27:
+            if i == 17:
                 await self.safe_send_message(channel, "Current Map: " + line.split("=")[1]+ "\n\n", expire_in=20)
         fread.close()
 
+        #adds all folder names to list
         location = next(os.walk(path))[1]
+
+        for i in location:
+            if '_nether' in i:
+                location.remove(i)
+        #have to use two different for loops to remove keywordd-containing items from location for some reason
+        for i in location:
+            if '_the_end' in i:
+                location.remove(i)
+
         location.remove("logs")
+        location.remove("src")
+        location.remove("target")
+        location.remove("plugins")
+        location.remove("crash-reports")
+        location.remove('.git')
+
+
         format = ('\n'.join('{}: {}'.format(*k) for k in enumerate(location)))
 
-        await self.safe_send_message(channel, "Existing worlds:" + "\n\n" + format + "\n", expire_in=20)
-        await self.safe_send_message(channel, "Select a number corresponding to a world." + "\n\n", expire_in=20)
+        existing_worlds = await self.safe_send_message(channel, "Existing worlds:" + "\n\n" + format + "\n", expire_in=20)
+        select_world = await self.safe_send_message(channel, "Select a number corresponding to a world." + "\n\n", expire_in=20)
         selection = await self.wait_for_message(20, author=author, channel=channel)
 
+        if not selection:
+            return Response("Nevermind.", delete_after=20)
         try:
             if selection.content:
-                try:
+                if selection.content.isdigit():
                     global world
                     world = location[int(selection.content)]
-                except Exception as e:
-                    pass
+                else:
+                    #another !command is given as response
+                    if selection.content.startswith(self.config.command_prefix):
+                        await self.safe_delete_message(existing_worlds)
+                        await self.safe_delete_message(select_world)
+                        await self.safe_delete_message(current_map_message)
+                        return
+                    else:
+                        world = str(selection.content)
             if selection.content.isnumeric() == False:
                 raise exceptions.HelpfulError("You did not enter a number, exiting", "Please enter a number that corresponds with the map.")
                 pass
-            elif not selection:
-                await self.safe_send_message(channel, "Nevermind.", expire_in=20)
-            else:
-                await self.safe_send_message(channel, "Something went wrong.", expire_in=20)
         except Exception as e:
             pass
 
         with open(address, 'w') as f:
             for i, line in enumerate(lines):
-                if i == 27:
+                if i == 17:
                     print(line)
                     f.write('level-name=' + world + "\n")
                     print(line)
                     continue
                 f.write(line)
         if selection:
-            await self.safe_send_message(channel, "Map successfully changed to: " + location[int(selection.content)] +
+            await self.safe_send_message(channel, "Map successfully changed to: " + world +
                                          "\n\n" + "Restart server using !server.", expire_in= 60)
+            await self.safe_delete_message(existing_worlds)
+            await self.safe_delete_message(select_world)
             await self.safe_delete_message(selection)
             print("Map changed to" + world + " by " + str(author))
 
-    async def cmd_imgur(self, player, author, channel, server, search=False):
+
+    #global variable that changes for !again command
+    perm_link_list = {}
+############################### IMGUR ####################################
+    async def imgur_search_mode(self, array, iterator, channel, existingauthor):
+        from urllib.request import urlopen
+        import os
+
+        #pretty stupid to get existingauthor as a parameter from the previous method since author is the same..
+        iterated = array[iterator]
+
+        await self.safe_send_message(channel, "Picture # : [" + str(iterator+1) + '/' + str(len(array)) + '] @ ' +
+                                     self.perm_link_list[str(existingauthor)]['title'])
+
+
+        #checking end type of the file and creating a temp file associated with it
+        if str(iterated).endswith('.jpg'):
+            with urlopen(iterated) as URL:
+                with open('temp.jpg', 'wb') as f:
+                    f.write(URL.read())
+                    await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\temp.jpg')
+                    f.close()
+                    os.remove('temp.jpg')
+        elif str(iterated).endswith('.gif'):
+            with urlopen(iterated) as URL:
+                with open('temp.gif', 'wb') as f:
+                    f.write(URL.read())
+                    await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\temp.gif')
+                    f.close()
+                    os.remove('temp.gif')
+        elif str(iterated).endswith('.png'):
+            with urlopen(iterated) as URL:
+                with open('temp.png', 'wb') as f:
+                    f.write(URL.read())
+                    await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\temp.png')
+                    f.close()
+                    os.remove('temp.png')
+
+
+    async def cmd_imgur(self, author, channel, server):
         import requests
         import json
+        import random
 
-        """
-        Usage:
-            {command_prefix}imgur (search) (album)
+        print(channel.id)
+        print ('311565508652564490')
+        CLIENT_ID = "c3a1e4d2c729d75"
+        ACCESS_TOKEN = '31e4e81dd7f6e38443dbb9d05219f074afacd1ad'
+        header = {'authorization': 'Client-ID ' + CLIENT_ID}
+        auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
 
-        Include only one:
-            album: Sends random pic to channel from known album name (album)
-            search: Searches album names and lets user select, sends random pic to channel
-        """
-
-        @staticmethod
-        class Imgur:
-            album = None
-            search = None
-            CLIENT_ID = "c3a1e4d2c729d75"
-            ACCESS_TOKEN = '31e4e81dd7f6e38443dbb9d05219f074afacd1ad'
-            header = {'authorization': 'Client-ID ' + CLIENT_ID}
-            auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
-            albums_title = []
-            albums_id = []
-
-        async def send_message(string):
-            await self.safe_send_message(channel, string, expire_in=20)
-
-        if Imgur.search:
-            #Searches for
-            r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=Imgur.header)
-            albumparse = json.loads(r.text)
-            data = albumparse["data"]
-            for i, k, v in enumerate(data):
-                if k == 'success':
-                    if v:
-                        send_message("Successfully loaded.")
-                    else:
-                        send_message("ERROR: There was a problem accessing the album information on Imgur,"
-                                                              "printing JSON response.")
-                        await self.safe_send_message(channel, data)
-                elif k != 'success' and i == len(data)-1:
-                    send_message("FATAL ERROR: Discord was not able to send a request to Imgur. Check access token/API status.")
-                    return 0
-
-            albums_title = []
-            albums_id = []
-            print("\n" + "Albums found:")
-            for i, title in enumerate(d['title'] for d in data):
-                albums_title.append(title)
-                print(i + title)
-            for i, id in enumerate(d['id'] for d in data):
-                albums_id.append(id)
-            albums = dict(zip(albums_title, albums_id))
-            print(albums)
-        elif Imgur.album:
-            #TODO: directly looking through an album instead of searching
+        #don't let people post in lobby
+        if channel.id == '311565508652564490':
+            await self.safe_send_message(channel, "This command is not allowed in Lobby.", expire_in=15)
             return
 
-        elif Imgur.album and Imgur.search:
-            #both arguments can't both be present
-            send_message("Can not use both arguments in Imgur function.")
+        #Searches for the album
+        r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=auth_header)
+        try:
+            albumparse = json.loads(r.text)
+        except json.decoder.JSONDecodeError as e :
+            await self.safe_send_message(channel, "Error accessing Imgur API.")
+            print(e)
+            return
+
+        #successfully queried the API?
+        data = albumparse["data"]
+        if albumparse['success'] == True:
+            pass
+        else:
+            await self.safe_send_message(channel, "ERROR: There was a problem accessing the album information "
+                    "on Imgur \n\nCopying JSON response:")
+            print(albumparse)
+            await self.safe_send_message(channel, str(albumparse['data']['error']))
+            return
+
+        albums_title = []
+        albums_identifier = []
+        albums_id = []
+
+
+
+        #checking if there are any albums in imgur, there will always be one so it's kinda useless
+        if albumparse['data'] == False:
+            await self.safe_send_message(channel, "No albums found.")
+            return
+
+        #deleting the previous entry for the author and creating a new one. Maybe a replace function exists?
+        if str(author) in self.perm_link_list:
+            del self.perm_link_list[str(author)]
+        self.perm_link_list[str(author)] = {}
+        all_lines = []
+
+        album_header_message = await self.safe_send_message(channel, "\n" + "Albums found for " + str(author.name) + ":")
+
+        #printing the title and the number corresponding to the albums
+        for identifier, title in enumerate(d['title'] for d in data):
+            albums_title.append(title)
+            albums_identifier.append(identifier+1)
+            all_lines.append(str(identifier+1) + ": " + title)
+
+        #prints all found items one under each other to avoid spamming the chat and getting flood protection'd
+        formatted = ("\n".join(map(str, all_lines)))
+
+        album_message = await discord.Client.send_message(self, channel, formatted)
+
+
+        for i in albumparse['data']:
+            for k, v in i.items():
+                if k == 'id':
+                    albums_id.append(v)
+
+        album_selection = await self.wait_for_message(20, author=author, channel=channel)
+
+        #user doesn't type anyting
+        if not album_selection or type(album_selection) == None:
+            await self.safe_send_message(channel, "Oh well.", expire_in=20)
+            await self.safe_delete_message(album_message)
+            await self.safe_delete_message(album_header_message)
+            return
+
+        #user started a new search because they have autism or something so clean up and exit function
+        if album_selection.content.startswith(self.config.command_prefix):
+            await self.safe_delete_message(album_message)
+            await self.safe_delete_message(album_header_message)
+            return
+
+        #is album nsfw? don't allow NSFW in non-NSFW channels
+        if channel.name != "nsfw":
+            #go through ALL dictionaries in 'data': [list]
+            for i in albumparse['data']:
+                #is the title of the album selected in the specific dictionary we're iterating?
+                for k,v in i.items():
+                    if v == albums_title[int(album_selection.content)-1]:
+                        #if so, look over all the keys to find description, iterate over entire i again to check:
+                        for k, v in i.items():
+                            if k == 'description' and v == 'nsfw':
+                                await self.safe_delete_message(album_message)
+                                await self.safe_delete_message(album_header_message)
+                                return Response("NSFW albums can only be posted on NSFW channels.", delete_after=20)
+
+
+        # setting the album name in {author: {'title': title ... }
+        # since the order of the loop doesn't change, we don't have to match up selections with our data.
+        # our data[our_selection -1(since the array we're displaying on discord starts at 1, not 0)]
+        # will always give us the right album
+        self.perm_link_list[str(author)]['title'] = albums_title[int(album_selection.content) - 1]
+
+
+        image_information = requests.get('https://api.imgur.com/3/album/'+ albums_id[int(album_selection.content)-1] +'/images', headers=header)
+        image_info_json = json.loads(image_information.text)
+        image_data = image_info_json['data']
+
+        link_list = []
+        response_titles = []
+
+        #finding link name of pictures in reply
+        for i in image_data:
+            for k, v in i.items():
+                if k == 'link':
+                    if 'links' not in self.perm_link_list:
+                        #leaving this none otherwise appending a list onto an empty list creates double list
+                        self.perm_link_list[str(author)]['links'] = None
+                    link_list.append(v)
+
+        self.perm_link_list[str(author)]['links'] = link_list
+
+        #finding titles of pictures and links in reply
+        for i in image_data:
+            for k, v in i.items():
+                if k == 'title':
+                    response_titles.append(v)
+
+        #selecting random picture from album using randrange, randint isn't inclusive
+        image_choice = random.randrange(0, len(link_list), 1)
+
+        await self.safe_delete_message(album_selection)
+        await self.safe_delete_message(album_message)
+        if album_header_message:
+            await self.safe_delete_message(album_header_message)
+        await self.imgur_search_mode(link_list, image_choice, channel, author)
+
+
+    async def cmd_again(self, channel, author):
+        import random
+        #no images in lobby
+        if channel.name == 'lobby':
+            await self.safe_send_message(channel, "This command is not allowed in Lobby.")
+            return
+
+        #no one has used !imgur before?
+        if not self.perm_link_list:
+            return Response("Must use !imgur command before posting another random pic from the same album", delete_after=20)
+
+        #has user previously used !again?
+        if str(author) in self.perm_link_list:
+            try:
+                #browsing keys in dict
+                for k, v in self.perm_link_list[str(author)].items():
+                    if k == "links":
+                        new_link_list = v
+                        image_choice = random.randrange(0, len(new_link_list),1)
+                        print("iterator:" +  str(image_choice))
+                        await self.imgur_search_mode(new_link_list, image_choice, channel, author)
+            #somehow list gets created without links being added
+            except KeyError:
+                await self.safe_send_message(channel, "ERROR: Debug: !imgur did not put in 'links' key in perm_link_list"
+                     "while creating list.")
+                return
+        else:
+            return Response("!again sends a random picture from an imgur album previously selected by"
+                            " the specific user of the command. Someone has used '!imgur' before, but it"
+                            " wasn't you.", delete_after=20)
 
 
 
 if __name__ == '__main__':
     bot = MusicBot()
     bot.run()
-    input()
