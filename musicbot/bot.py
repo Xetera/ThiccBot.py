@@ -9,15 +9,13 @@ import discord
 import asyncio
 import traceback
 
+import pymysql
 
 from discord import utils
 from discord.object import Object
 from discord.enums import ChannelType
 from discord.voice_client import VoiceClient
 from discord.ext.commands.bot import _get_variable
-from discord import client
-from discord import embeds
-
 
 from io import BytesIO
 from functools import wraps
@@ -1834,8 +1832,24 @@ class MusicBot(discord.Client):
         command = command[len(self.config.command_prefix):].lower().strip()
 
         handler = getattr(self, 'cmd_%s' % command, None)
-        if not handler:
-            return
+        if not handler:  # here's where you check if the command isn't in the bot
+            conn = pymysql.connect(
+                host='localhost',
+                port=3306,
+                user='root',
+                passwd='23nisan',
+                db='discord'
+            )
+            cur = conn.cursor()
+            cur.execute('SELECT commandOwner FROM commands WHERE commandName=\'{}\''.format(command))
+            print(cur.description)
+            for row in cur:
+
+                if 'node' in row:
+                    return await self.safe_send_message(message.channel, "I'd have to know JavaScript to run this "
+                                                                         "command, ask <@372615866652557312> instead.")
+                else:
+                    return print(command + " doesn't exist on any bot.")
 
         if message.channel.is_private:
             if not (message.author.id == self.config.owner_id and command == 'joinserver'):
@@ -1966,6 +1980,32 @@ class MusicBot(discord.Client):
                 await self.safe_send_message(message.channel, '```\n%s\n```' % traceback.format_exc())
 
     async def on_voice_state_update(self, before, after):
+
+        # logging user movement
+
+        from datetime import datetime
+
+        current_time = datetime.now().strftime("%H:%M %Y-%m-%d ")
+
+        for channel in after.server.channels:
+            if channel.name == "logs":
+                self.server_selection = channel
+        if before.voice_channel is None:
+            await self.safe_send_message(self.server_selection,
+                                         "```nginx\n{} joined {} at {} (California Time)\n```".format(after.name, after.voice_channel, current_time))
+        elif after.voice_channel is None:
+            await self.safe_send_message(self.server_selection, "```nginx\n{} disconnected from {} at {} (California Time)\n```"
+                                         .format(after.name, before.voice_channel, current_time))
+        # voice state is triggered when user mutes but doesn't change channels, don't display that
+
+        elif before.voice_channel == after.voice_channel:
+            return
+        else:
+            await self.safe_send_message(self.server_selection,
+                                         "```nginx\n{} switched from {} to {} at {} (California Time)\n```".format(after.name, before.voice_channel, after.voice_channel, current_time))
+
+        print("{} joined {} at {} my time".format(after.name, after.voice_channel, current_time))
+
         if not all([before, after]):
             return
 
@@ -2008,7 +2048,6 @@ class MusicBot(discord.Client):
                 print("[config:autopause] Pausing")
                 self.server_specific_data[after.server]['auto_paused'] = True
                 player.pause()
-        
 
     async def on_server_update(self, before: discord.Server, after: discord.Server):
         if before.region != after.region:
@@ -2017,111 +2056,76 @@ class MusicBot(discord.Client):
             await self.reconnect_voice_client(after)
 
 
-######################################################
-################### My Commands ######################
-######################################################
+####################################
+# My Commands ######################
+####################################
 
-
-    async def cmd_weather(self, channel, author):
+    async def cmd_weather(self, channel, author, city_name, leftover_args):
         import json
-        from array import array
         import requests
-        from collections import OrderedDict
-        from pprint import pprint
+        from datetime import datetime
+        contact_message = self.safe_send_message(channel, "Contacting OpenWeatherMap...")
         api_key = "&APPID=507e30d896f751513350c41899382d89"
         city_name_url = "http://api.openweathermap.org/data/2.5/weather?q="
         units = "&units=metric"
-        global general_info
-        general_info = {
-            "Humidity (%)": 0,
-            "Pressure": 0,
-            "Temperature(C)": 0,
-            "Max. Temp.(C)": 0,
-            "Min. Temp.(C)": 0
-            }
+        if not city_name:
+            return Response('Please enter a city after {}weather'.format(self.config.command_prefix), delete_after=20)
+        city = ' '.join([city_name, *leftover_args])
+        print(type(city))
+        urlrequest = city_name_url + city + units + api_key
+        response = requests.get(urlrequest)
+        data = json.loads(response.text)
+        cityID = data['id']
+        #getting forecast data
+        forecast_url = "http://api.openweathermap.org/data/2.5/forecast?id="
 
-        def connectapi():
-            global parsed
-            global data
-            global urlrequest
-            urlrequest = city_name_url + str_city_input + units + api_key
-            response = requests.get(urlrequest)
-            content = json.loads(response.text)
+        forecast_request = forecast_url + str(cityID) + units + api_key
+        forecast_response = requests.get(forecast_request)
+        forecast = json.loads(forecast_response.text)
 
+        date_array = []
+        forecast_array = []
+        temperature_array = []
+        dates = [y['dt'] for y in forecast['list']]
+        days = dates[::8]
+        for i in range(len(days)):
+            date_array.append(datetime.fromtimestamp(float(days[i])).strftime('%m/%d/%Y'))
 
-            data = json.loads(content.decode('utf8'), object_pairs_hook=OrderedDict)
-            parsed = json.dumps(data, indent=4, sort_keys=True)
-            return content
+        for d in forecast['list']:
+            for k, v in d.items():
+                if v in days:
+                    print(d)
+                    forecast_array.append(d['weather'][0]['description'])
+                    temperature_array.append(d['main']['temp'])
 
+        country = data['sys']['country']
 
-        def find_data():
+        weather_embed = discord.Embed(
+            title='Weather Data for {}:'.format(city.title()),
+            type='rich',
+            color=author.color,
+        )
+        main = data['main']
+        weather_embed.set_thumbnail(url='http://openweathermap.org/img/w/{}.png'.format(data['weather'][0]['icon']))
+        weather_embed.add_field(name='Country', value=country, inline=True)
+        weather_embed.add_field(name='Date', value=str(datetime.fromtimestamp(float(data['dt'])).strftime('%m-%d-%Y')), inline=True)
+        weather_embed.add_field(name='Temperature', value="{} °C".format(main['temp']), inline=True)
+        weather_embed.add_field(name='Weather Description', value=data['weather'][0]['description'].title(), inline=True)
+        weather_embed.add_field(name='Humidity', value="{} %".format(main['humidity']), inline=True)
+        weather_embed.add_field(name='Pressure', value="{} kPa".format(main['pressure']/10), inline=True)
+        for i in range(len(forecast_array)):
+            weather_embed.add_field(name="Forecast for {}".format(date_array[i]), value="{}:\n{}\n{}:\n{} °C"
+                                    .format("Description", forecast_array[i].title(), "Temperature", temperature_array[i]), inline=True)
 
-            global country_name
-            global city_name
-            global general_info
-            global weather_description
-            global formatted_general_info
-            city_name = data['name']
-            country_name = str(data['sys']['country'])
-            for key, value in data['main'].items():
-               if key == "humidity":
-                    general_info['Humidity (%)'] = value
-               elif key == "pressure":
-                   general_info['Pressure'] = value
-               elif key == "temp":
-                   general_info['Temperature(C)'] = value
-               elif key == "temp_max":
-                   general_info['Max. Temp.(C)'] = value
-               elif key == "temp_min":
-                   general_info['Min. Temp.(C)'] = value
-               else:
-                   continue
-
-        def formatlines():
-            global innerlines
-            global formatted_general_info
-            innerlines = '\n'.join('%s:%s' % (k, v) for k, v in general_info.items())
-            formatted_general_info = (str(innerlines).replace("{", "").replace("}", ""))
-            return """      \
-\t\t        %s
-\t\t        """ % formatted_general_info
-        await self.send_typing(channel)
-        await self.safe_send_message(channel, """Weather Lookup\n\nEnter the name of the city that you want
-to look at the weather details of.""", expire_in=30)
-        while True:
-
-            global city_input
-            global str_city_input
-            city_input = await self.wait_for_message(20, author=author, channel=channel)
-            if not city_input:
-                return Response("There was no response from "+ str(author) +".",
-                                delete_after=60)
-            elif city_input.content.startswith(self.config.command_prefix) or \
-                    city_input.content.lower().startswith('exit'):
-                break
-            else:
-                str_city_input = city_input.content.strip()
-                await self.safe_send_message(channel, connectapi())
-
-            try:
-                if 'name' in data:
-                    find_data()
-                    await self.send_typing(channel)
-                    await self.safe_send_message(channel,"\n%r in %r:\n\nGeneral Info:" % (city_name, country_name))
-                    await self.safe_send_message(channel, formatlines())
-                    break
-                else:
-                    await self.safe_send_message(channel, "Something went wrong, would you like to try again?")
-                    continue
-            except Exception as e:
-                raise exceptions.CommandError(e, expire_in=20)
+        await discord.Client.send_message(self, destination=channel, embed=weather_embed)
+        self.safe_delete_message(contact_message)
 
     async def cmd_coin(self, channel,author):
         import random
 
         flip = ["Heads", "Tails"]
 
-        randnumber = random.randrange(0, 2)
+        rand_number = random.randrange(0, 2)
 
         cards = [':dollar:', ':yen:', ':euro:', ':pound:']
         hand = await self.send_message(channel, ' '.join(cards))
@@ -2133,7 +2137,7 @@ to look at the weather details of.""", expire_in=30)
             await asyncio.sleep(0.6)
         await self.safe_delete_message(hand, quiet=True)
 
-        return Response("{} flipped: {}".format(author.name, flip[randnumber]), delete_after=30)
+        return Response("{} flipped: {}".format(author.name, flip[rand_number]), delete_after=30)
 
 ################ TRANSLATE ####################################################################
     async def cmd_translate(self, author, channel, user_input, leftover_args):
@@ -2152,12 +2156,22 @@ to look at the weather details of.""", expire_in=30)
         translator = Translator()
 
 
-        #print(type(text))
+        # print(type(text))
 
         detection = translator.detect(user_input)
         text = translator.translate(user_input)
         return Response(str(detection) + "\n" + str(text))
 
+
+    async def cmd_jointime(self, server, author):
+        """
+        !jointime
+
+        Returns the date user joined the server
+        """
+        time = author.joined_at.strftime("%m-%d-%Y")
+
+        return Response("{} joined {} at {}.".format((author.name),(server), (time)))
 
     async def cmd_testme(self,channel):
         await self.safe_send_message(channel, "MY NIGGAS", expire_in=20)
@@ -2165,56 +2179,16 @@ to look at the weather details of.""", expire_in=30)
     async def cmd_report(self, channel):
         await self.safe_send_message(channel, "Fuck you Weien.", expire_in=20)
 
-    async def on_voice_state_update(self)
-    weien_questions = ["Weien's _______ is very small.",
-                       "Weien's mom is a _______.",
-                       "Weien's dad is a _______.",
-                       "Weien's brother doesn't _______.",
-                       "Weien learned _______ in switzerland",
-                       "Weien's family makes ______ dollars a year.",
-                       "Weien is attracted to _______",
-                       "Weien is commonly classified as a ______",
-                       "Weien is from _______"
-                       ]
-
-    weien_answers = ["dick",
-                     "whore",
-                     "spy",
-                     "exist",
-                     "nothing",
-                     "700k",
-                     "men",
-                     "kid",
-                     "china"
-                     ]
-
-    weien_correct = ["Did you know that Weien's penis is the only thing in the universe that is smaller than the plank lenght?",
-                     "She has been crowned the elitest whore of Taiwan for 12 years in a row now. Impressive!",
-                     "One of the more widely-known trivias. Weien's dad works as a Taiwanese national spy with embassador/trader being his "
-                        "cover to avoid being detected by the Bulgarian and Mexican governments.",
-                     "There has not been a single documented sighting of Weien's brother, officially making him the most "
-                        "elusive mythical creature to date.",
-                     "He could have learned a little bit of German as it is the country's national language but instead he chose "
-                        "to learn nothing.",
-                     "Because of the recent re-settlement, his family's income has gone down from $1M a year to 700k, however "
-                        "that number is projected to rise back to the previous amount in the upcoming months.",
-                     "Even though he has previously had relationships with women, there is a consensus within the scientific "
-                        "community confirming his homosexuality.",
-                     "One of the first member of the Genus:Easy, Species: Kids.  Weien Chen has made several breakthroughs in "
-                        "kidology by studying himself while playing games.",
-                     "Although thought to be from Taiwan, Weien Chen is actually a proud citizen of mainland China, as seen by his "
-                        "immense wealth."
-                     ]
-
     async def cmd_weien(self, channel, author):
         import random
-        number = random.randrange(0, len(self.weien_questions))
+        from musicbot import weien
+        number = random.randrange(0, len(weien.weien_questions))
 
-        question_selection = self.weien_questions[number]
-        answer_selection = self.weien_answers[number]
-        correct_selection = self.weien_correct[number]
+        question_selection = weien.weien_questions[number]
+        answer_selection = weien.weien_answers[number]
+        correct_selection = weien.weien_correct[number]
 
-        prompt = await self.safe_send_message(channel,"Fact # [" + str(number+1) +"/" +str(len(self.weien_questions)) +"]\nFill in the blanks:\n\n{}\n\n".format(question_selection),expire_in=60)
+        prompt = await self.safe_send_message(channel,"Fact # [" + str(number+1) +"/" +str(len(weien.weien_questions)) +"]\nFill in the blanks:\n\n{}\n\n".format(question_selection),expire_in=60)
         print(str(question_selection) + "\n" + str(answer_selection))
 
         iter = 0
@@ -2239,7 +2213,7 @@ to look at the weather details of.""", expire_in=30)
                 if iter == 3:
                     return Response("Wow you're a dumbass, the answer is: " + answer_selection + ".\n"
                                     + correct_selection)
-                if question_selection == self.weien_questions[4] and answer.content == ('galician' or 'Galician'):
+                if question_selection == weien.weien_questions[4] and answer.content == ('galician' or 'Galician'):
                     await self.safe_send_message(channel,
                     "You answered: "+answer.content+ "\n\nCommon misconception. The Swiss population does not actually speak Galician or require"
                     " their citizens to learn Galician. https://en.wikipedia.org/wiki/Languages_of_Switzerland"
@@ -2252,15 +2226,28 @@ to look at the weather details of.""", expire_in=30)
             await self.safe_delete_message(answer)
 
 
-
-        #await self.safe_send_message(channel, "A semi-autistic retard from mainland China.", expire_in=20)
-
-
     async def cmd_mari(self):
         return Response("Pika Pika!")
 
+    async def cmd_mosti(self, channel, author):
+        await self.safe_send_message(channel, "Mosti thought generator\nPlease enter the number of lines "
+                                              "of Mosti thoughts you'd like to generate.")
+        response = await self.wait_for_message(20, author=author, channel=channel)
+        if not response:
+            return
+        if response.content.isdigit() == False:
+            return Response("That's not a number you idiot.")
+        elif int(response.content) > 100:
+            raise exceptions.HelpfulError("Mostafa is not capable of having that many thoughts.",
+                                          "Enter less things to think about.")
+        array = []
+        for i in range(0, int(response.content)):
+            array.append("{}: {}".format(str((i+1)),("Easy Kids").rjust(9," ")))
+        response = '\n'.join(array)
+        return Response(response)
 
-################COOKIES ##############################################################################################
+################ COOKIES ##############################################################################################
+
     async def _cmd_get_user_cookies(self):
         pass
 
@@ -2307,23 +2294,23 @@ to look at the weather details of.""", expire_in=30)
                                                + str(cookie_amount) +" :cookie: awarded.")
 
         ## all catching of faulty input/illegal commands caught
-        #starting SQL process
+        # starting SQL process
         conn = sqlite3.connect('D:\\Program Files (x86)\\SQLite\\SQLiteStudio\\Discord.db')
         c = conn.cursor()
-        #checking for table
+        # checking for table
 
         c.execute('CREATE TABLE IF NOT EXISTS cookies(userid INT, username TEXT, cookie_value INT)')
         print("created table")
         conn.commit()
 
-        c.execute('SELECT COUNT(*)FROM cookies WHERE userid == {}'.format(usr.id))
+
         exists = c.execute('SELECT COUNT(*)FROM cookies WHERE userid == {}'.format(usr.id))
         exist_return = exists.fetchone()
         print(exist_return)
         if exist_return[0] == 1:
             print("User found")
         elif exist_return[0] == 0:
-            #TODO: see if it's possible assign this a variable and use it to print out 1 to avoid looking through the db for no reason
+            # TODO: see if it's possible assign this a variable and use it to print out 1 to avoid looking through the db for no reason
             c.execute('INSERT INTO cookies(userid,username,cookie_value) VALUES({}, {}, {})'.format(usr.id, "\"" + str(usr.name) + "\"", 0))
         else:
             error = c.execute('SELECT * FROM cookies WHERE userid = {}'. format(usr.id))
@@ -2331,8 +2318,8 @@ to look at the weather details of.""", expire_in=30)
             return Response("ERROR:\n\tDEBUGGING: Multiple entries of userid were found, printing all rows\n" + str(error))
 
         c.execute('UPDATE cookies SET cookie_value = cookie_value + {} WHERE userid = {}'.format(cookie_amount, usr.id))
-        #in case the person changed their name since the last time they used the command
-        #klkc.execute('UPDATE cookies SET username = {} WHERE userid = {}'.format(usr.name, usr.id))
+        # in case the person changed their name since the last time they used the command
+        # klkc.execute('UPDATE cookies SET username = {} WHERE userid = {}'.format(usr.name, usr.id))
         current_cookies = c.execute('SELECT cookie_value from cookies WHERE userid = {}'.format(usr.id))
         current_cookies = current_cookies.fetchone()[0]
 
@@ -2399,7 +2386,7 @@ to look at the weather details of.""", expire_in=30)
                         await self.send_typing(channel)
                         await self.safe_send_message(channel, "Server couldn't restart.", expire_in=20)
         except AttributeError as e:
-            #shitty error handling to prevent discord from giving errors when things time out
+            # shitty error handling to prevent discord from giving errors when things time out
             pass
         try:
             await self.safe_delete_message(start_prompt)
@@ -2416,16 +2403,16 @@ to look at the weather details of.""", expire_in=30)
         fread = open(address)
         for i, line in enumerate(fread):
             if i == 17:
-                await self.safe_send_message(channel, "Current Map: " + line.split("=")[1]+ "\n\n", expire_in=20)
+                current_map_message = await self.safe_send_message(channel, "Current Map: " + line.split("=")[1]+ "\n\n", expire_in=20)
         fread.close()
 
-        #adds all folder names to list
+        # adds all folder names to list
         location = next(os.walk(path))[1]
 
         for i in location:
             if '_nether' in i:
                 location.remove(i)
-        #have to use two different for loops to remove keywordd-containing items from location for some reason
+        # have to use two different for loops to remove keywordd-containing items from location for some reason
         for i in location:
             if '_the_end' in i:
                 location.remove(i)
@@ -2452,7 +2439,7 @@ to look at the weather details of.""", expire_in=30)
                     global world
                     world = location[int(selection.content)]
                 else:
-                    #another !command is given as response
+                    # another !command is given as response
                     if selection.content.startswith(self.config.command_prefix):
                         await self.safe_delete_message(existing_worlds)
                         await self.safe_delete_message(select_world)
@@ -2483,21 +2470,21 @@ to look at the weather details of.""", expire_in=30)
             print("Map changed to" + world + " by " + str(author))
 
 
-    #global variable that changes for !again command
+    # global variable that changes for !again command
     perm_link_list = {}
 ############################### IMGUR ####################################
     async def imgur_search_mode(self, array, iterator, channel, existingauthor):
         from urllib.request import urlopen
         import os
 
-        #pretty stupid to get existingauthor as a parameter from the previous method since author is the same..
+        # pretty stupid to get existingauthor as a parameter from the previous method since author is the same..
         iterated = array[iterator]
 
         await self.safe_send_message(channel, "Picture # : [" + str(iterator+1) + '/' + str(len(array)) + '] @ ' +
                                      self.perm_link_list[str(existingauthor)]['title'])
 
 
-        #checking end type of the file and creating a temp file associated with it
+        # checking end type of the file and creating a temp file associated with it
         if str(iterated).endswith('.jpg'):
             with urlopen(iterated) as URL:
                 with open('temp.jpg', 'wb') as f:
@@ -2533,12 +2520,12 @@ to look at the weather details of.""", expire_in=30)
         header = {'authorization': 'Client-ID ' + CLIENT_ID}
         auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
 
-        #don't let people post in lobby
+        # don't let people post in lobby
         if channel.id == '311565508652564490':
             await self.safe_send_message(channel, "This command is not allowed in Lobby.", expire_in=15)
             return
 
-        #Searches for the album
+        # Searches for the album
         r = requests.get('https://api.imgur.com/3/account/DiscordPictureWizard/albums/', headers=auth_header)
         try:
             albumparse = json.loads(r.text)
@@ -2547,7 +2534,7 @@ to look at the weather details of.""", expire_in=30)
             print(e)
             return
 
-        #successfully queried the API?
+        # successfully queried the API?
         data = albumparse["data"]
         if albumparse['success'] == True:
             pass
@@ -2564,12 +2551,12 @@ to look at the weather details of.""", expire_in=30)
 
 
 
-        #checking if there are any albums in imgur, there will always be one so it's kinda useless
+        # checking if there are any albums in imgur, there will always be one so it's kinda useless
         if albumparse['data'] == False:
             await self.safe_send_message(channel, "No albums found.")
             return
 
-        #deleting the previous entry for the author and creating a new one. Maybe a replace function exists?
+        # deleting the previous entry for the author and creating a new one. Maybe a replace function exists?
         if str(author) in self.perm_link_list:
             del self.perm_link_list[str(author)]
         self.perm_link_list[str(author)] = {}
@@ -2577,13 +2564,13 @@ to look at the weather details of.""", expire_in=30)
 
         album_header_message = await self.safe_send_message(channel, "\n" + "Albums found for " + str(author.name) + ":")
 
-        #printing the title and the number corresponding to the albums
+        # printing the title and the number corresponding to the albums
         for identifier, title in enumerate(d['title'] for d in data):
             albums_title.append(title)
             albums_identifier.append(identifier+1)
             all_lines.append(str(identifier+1) + ": " + title)
 
-        #prints all found items one under each other to avoid spamming the chat and getting flood protection'd
+        # prints all found items one under each other to avoid spamming the chat and getting flood protection'd
         formatted = ("\n".join(map(str, all_lines)))
 
         album_message = await discord.Client.send_message(self, channel, formatted)
@@ -2596,27 +2583,27 @@ to look at the weather details of.""", expire_in=30)
 
         album_selection = await self.wait_for_message(20, author=author, channel=channel)
 
-        #user doesn't type anyting
+        # user doesn't type anyting
         if not album_selection or type(album_selection) == None:
             await self.safe_send_message(channel, "Oh well.", expire_in=20)
             await self.safe_delete_message(album_message)
             await self.safe_delete_message(album_header_message)
             return
 
-        #user started a new search because they have autism or something so clean up and exit function
+        # user started a new search because they have autism or something so clean up and exit function
         if album_selection.content.startswith(self.config.command_prefix):
             await self.safe_delete_message(album_message)
             await self.safe_delete_message(album_header_message)
             return
 
-        #is album nsfw? don't allow NSFW in non-NSFW channels
+        # is album nsfw? don't allow NSFW in non-NSFW channels
         if channel.name != "nsfw":
-            #go through ALL dictionaries in 'data': [list]
+            # go through ALL dictionaries in 'data': [list]
             for i in albumparse['data']:
-                #is the title of the album selected in the specific dictionary we're iterating?
+                # is the title of the album selected in the specific dictionary we're iterating?
                 for k,v in i.items():
                     if v == albums_title[int(album_selection.content)-1]:
-                        #if so, look over all the keys to find description, iterate over entire i again to check:
+                        # if so, look over all the keys to find description, iterate over entire i again to check:
                         for k, v in i.items():
                             if k == 'description' and v == 'nsfw':
                                 await self.safe_delete_message(album_message)
@@ -2638,24 +2625,24 @@ to look at the weather details of.""", expire_in=30)
         link_list = []
         response_titles = []
 
-        #finding link name of pictures in reply
+        # finding link name of pictures in reply
         for i in image_data:
             for k, v in i.items():
                 if k == 'link':
                     if 'links' not in self.perm_link_list:
-                        #leaving this none otherwise appending a list onto an empty list creates double list
+                        # leaving this none otherwise appending a list onto an empty list creates double list
                         self.perm_link_list[str(author)]['links'] = None
                     link_list.append(v)
 
         self.perm_link_list[str(author)]['links'] = link_list
 
-        #finding titles of pictures and links in reply
+        # finding titles of pictures and links in reply
         for i in image_data:
             for k, v in i.items():
                 if k == 'title':
                     response_titles.append(v)
 
-        #selecting random picture from album using randrange, randint isn't inclusive
+        # selecting random picture from album using randrange, randint isn't inclusive
         image_choice = random.randrange(0, len(link_list), 1)
 
         await self.safe_delete_message(album_selection)
@@ -2667,26 +2654,26 @@ to look at the weather details of.""", expire_in=30)
 
     async def cmd_again(self, channel, author):
         import random
-        #no images in lobby
+        # no images in lobby
         if channel.name == 'lobby':
             await self.safe_send_message(channel, "This command is not allowed in Lobby.")
             return
 
-        #no one has used !imgur before?
+        # no one has used !imgur before?
         if not self.perm_link_list:
             return Response("Must use !imgur command before posting another random pic from the same album", delete_after=20)
 
-        #has user previously used !again?
+        # has user previously used !again?
         if str(author) in self.perm_link_list:
             try:
-                #browsing keys in dict
+                # browsing keys in dict
                 for k, v in self.perm_link_list[str(author)].items():
                     if k == "links":
                         new_link_list = v
                         image_choice = random.randrange(0, len(new_link_list),1)
                         print("iterator:" +  str(image_choice))
                         await self.imgur_search_mode(new_link_list, image_choice, channel, author)
-            #somehow list gets created without links being added
+            # somehow list gets created without links being added
             except KeyError:
                 await self.safe_send_message(channel, "ERROR: Debug: !imgur did not put in 'links' key in perm_link_list"
                      "while creating list.")
@@ -2695,6 +2682,111 @@ to look at the weather details of.""", expire_in=30)
             return Response("!again sends a random picture from an imgur album previously selected by"
                             " the specific user of the command. Someone has used '!imgur' before, but it"
                             " wasn't you.", delete_after=20)
+    async def cmd_download(self):
+        """
+        Usage:
+            !download
+        Sends the most up-to-date link to download the Imgur Uploader.
+        """
+        return Response("Here is the download link for the ImgurUploader https://www.dropbox.com/s/sihwa1x0ss1xsyu/ClientUploader.exe?dl=1&m=")
+################################ CYANIDE AND HAPPINESS ########################
+    async def cmd_ch(self,channel):
+        """
+        Usage:
+            !ch
+        Sends a random cyanide and happiness comic.
+        """
+        from bs4 import BeautifulSoup
+        import requests
+        import random
+        from urllib.request import urlopen
+
+        while True:
+            number = random.randrange(0, 4751)
+            r = requests.get("http://explosm.net/comics/{}/".format(number))
+            if r.text == "Could not find comic":
+                continue
+            else:
+                break
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        imgs = soup.find("img", {"id": "main-comic"})
+
+        link = imgs['src']
+
+        ximg = link.split("//")[1]
+        ximg = ("http://{}".format(ximg))
+
+        await self.safe_send_message(channel, "Comic #: [{}/{}]".format(number, 4751))
+        with urlopen(ximg) as URL:
+            with open('cyanide.jpg', 'wb') as f:
+                f.write(URL.read())
+                await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\cyanide.jpg')
+                f.close()
+                os.remove('cyanide.jpg')
+
+############################## GIPHY API ##############################################################
+
+    async def cmd_gif(self, author, channel, leftover_args, parameter=None):
+        '''
+        Usage:
+        {command_prefix}gif [parameter]
+
+        Searches gifs from giphy and sends the first result.
+        Sends random trending if no parameters are given.
+        '''
+        import requests
+        from urllib.request import urlopen
+        import json
+
+        API_KEY = "dKwKU0ZoUl9iETXEURBd8bddOvAIFT01"
+
+        # fucking crazy but it works
+        async def trending():
+            for k in rjson['data']:
+                for k2, v2 in k.items():
+                    if k2 == "images":
+                        for k3, v3 in v2.items():
+                            if k3 == "fixed_height_downsampled":
+                                for k4, v4 in v3.items():
+                                    if k4 == "url":
+                                        return v4
+
+        if parameter:
+            parameter = ' '.join([parameter, *leftover_args])
+            r = requests.get("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=1&offset=0&rating=G&lang=en".format(API_KEY, parameter))
+            rjson = json.loads(r.text)
+
+            for k, v in rjson['data'][0].items():
+                if k == "images":
+                    for k2, v2 in v.items():
+                        if k2 == "fixed_height_downsampled":
+                            for k3, v3 in v2.items():
+                                if k3 == "url":
+                                    self.giphyurl = v3
+
+        else:
+            await self.safe_send_message(channel, "No search parameter provided, sending random gif.")
+            r = requests.get("https://api.giphy.com/v1/gifs/random?api_key={}&tag=&rating=R".format(API_KEY))
+            rjson = json.loads(r.text)
+
+            for k, v in rjson['data'].items():
+                if k == "fixed_height_downsampled_url":
+                    self.giphyurl = v
+
+
+
+        with urlopen(self.giphyurl) as URL:
+            with open('giphy.gif', 'wb') as f:
+                f.write(URL.read())
+                await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\giphy.gif')
+                f.close()
+                os.remove('giphy.gif')
+
+
+
+
 
 
 
