@@ -68,6 +68,7 @@ class Response:
 class MusicBot(discord.Client):
 
     def __init__(self, config_file=ConfigDefaults.options_file, perms_file=PermissionsDefaults.perms_file):
+        self.dirname = os.path.dirname(__file__).rsplit('\\', 1)[0]
         self.players = {}
         self.the_voice_clients = {}
         self.locks = defaultdict(asyncio.Lock)
@@ -2484,26 +2485,26 @@ class MusicBot(discord.Client):
                                      self.perm_link_list[str(existingauthor)]['title'])
 
 
-        # checking end type of the file and creating a temp file associated with it
+        # TODO: Make a single method that takes extension as an argument
         if str(iterated).endswith('.jpg'):
             with urlopen(iterated) as URL:
                 with open('temp.jpg', 'wb') as f:
                     f.write(URL.read())
-                    await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\temp.jpg')
+                    await discord.Client.send_file(self, channel, self.dirname + '\\temp.jpg')
                     f.close()
                     os.remove('temp.jpg')
         elif str(iterated).endswith('.gif'):
             with urlopen(iterated) as URL:
                 with open('temp.gif', 'wb') as f:
                     f.write(URL.read())
-                    await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\temp.gif')
+                    await discord.Client.send_file(self, channel, self.dirname + '\\temp.gif')
                     f.close()
                     os.remove('temp.gif')
         elif str(iterated).endswith('.png'):
             with urlopen(iterated) as URL:
                 with open('temp.png', 'wb') as f:
                     f.write(URL.read())
-                    await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\temp.png')
+                    await discord.Client.send_file(self, channel, self.dirname + '\\temp.png')
                     f.close()
                     os.remove('temp.png')
 
@@ -2722,7 +2723,7 @@ class MusicBot(discord.Client):
         with urlopen(ximg) as URL:
             with open('cyanide.jpg', 'wb') as f:
                 f.write(URL.read())
-                await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\cyanide.jpg')
+                await discord.Client.send_file(self, channel, self.dirname + '\\cyanide.jpg')
                 f.close()
                 os.remove('cyanide.jpg')
 
@@ -2780,14 +2781,13 @@ class MusicBot(discord.Client):
         with urlopen(self.giphyurl) as URL:
             with open('giphy.gif', 'wb') as f:
                 f.write(URL.read())
-                await discord.Client.send_file(self, channel, 'C:\\Users\\Ali\\Desktop\\MusicBot-master\\giphy.gif')
+                await discord.Client.send_file(self, channel, self.dirname + "\\giphy.gif")
                 f.close()
                 os.remove('giphy.gif')
 
 
-
-
-
+    async def cmd_shittybot(self, author, channel):
+        return await self.safe_send_message(channel, "Maybe a little bit but definitely not as much as Mee6")
 
 
 if __name__ == '__main__':
