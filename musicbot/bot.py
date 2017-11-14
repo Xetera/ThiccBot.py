@@ -2484,8 +2484,9 @@ class MusicBot(discord.Client):
         await self.safe_send_message(channel, "Picture # : [" + str(iterator+1) + '/' + str(len(array)) + '] @ ' +
                                      self.perm_link_list[str(existingauthor)]['title'])
 
+# TODO: Make a single method that takes the extension as an argument, move picture identifier inside method to
+# TODO: minimize the time difference between sending the text and the picture so ppl don't type between the msgs
 
-        # TODO: Make a single method that takes extension as an argument
         if str(iterated).endswith('.jpg'):
             with urlopen(iterated) as URL:
                 with open('temp.jpg', 'wb') as f:
@@ -2499,7 +2500,7 @@ class MusicBot(discord.Client):
                     f.write(URL.read())
                     await discord.Client.send_file(self, channel, self.dirname + '\\temp.gif')
                     f.close()
-                    os.remove('temp.gif') 
+                    os.remove('temp.gif')
         elif str(iterated).endswith('.png'):
             with urlopen(iterated) as URL:
                 with open('temp.png', 'wb') as f:
