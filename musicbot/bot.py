@@ -2499,7 +2499,7 @@ class MusicBot(discord.Client):
                     f.write(URL.read())
                     await discord.Client.send_file(self, channel, self.dirname + '\\temp.gif')
                     f.close()
-                    os.remove('temp.gif')
+                    os.remove('temp.gif') 
         elif str(iterated).endswith('.png'):
             with urlopen(iterated) as URL:
                 with open('temp.png', 'wb') as f:
