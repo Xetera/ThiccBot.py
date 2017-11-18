@@ -35,7 +35,7 @@ from . import downloader
 from .opus_loader import load_opus_lib
 from .constants import VERSION as BOTVERSION
 from .constants import DISCORD_MSG_CHAR_LIMIT, AUDIO_CACHE_PATH
-
+from .secret import *
 load_opus_lib()
 
 
@@ -1838,7 +1838,7 @@ class MusicBot(discord.Client):
                 host='localhost',
                 port=3306,
                 user='root',
-                passwd='23nisan',
+                passwd=mysql_password,
                 db='discord'
             )
             cur = conn.cursor()
@@ -1851,7 +1851,7 @@ class MusicBot(discord.Client):
                                                                          "command, ask <@372615866652557312> instead.")
                 else:
                     return print(command + " doesn't exist on any bot.")
-
+            conn.close()
         if message.channel.is_private:
             if not (message.author.id == self.config.owner_id and command == 'joinserver'):
                 await self.send_message(message.channel, 'You cannot use this bot in private messages.')
@@ -2055,7 +2055,7 @@ class MusicBot(discord.Client):
             self.safe_print("[Servers] \"%s\" changed regions: %s -> %s" % (after.name, before.region, after.region))
 
             await self.reconnect_voice_client(after)
-
+    #  here's where we would be putting the code that backs up the server after every update
 
 ####################################
 # My Commands ######################
@@ -2066,21 +2066,21 @@ class MusicBot(discord.Client):
         import requests
         from datetime import datetime
         contact_message = self.safe_send_message(channel, "Contacting OpenWeatherMap...")
-        api_key = "&APPID=507e30d896f751513350c41899382d89"
+
         city_name_url = "http://api.openweathermap.org/data/2.5/weather?q="
         units = "&units=metric"
         if not city_name:
             return Response('Please enter a city after {}weather'.format(self.config.command_prefix), delete_after=20)
         city = ' '.join([city_name, *leftover_args])
         print(type(city))
-        urlrequest = city_name_url + city + units + api_key
+        urlrequest = city_name_url + city + units + weather_api_key
         response = requests.get(urlrequest)
         data = json.loads(response.text)
         cityID = data['id']
-        #getting forecast data
+        #  getting forecast data
         forecast_url = "http://api.openweathermap.org/data/2.5/forecast?id="
 
-        forecast_request = forecast_url + str(cityID) + units + api_key
+        forecast_request = forecast_url + str(cityID) + units + weather_api_key
         forecast_response = requests.get(forecast_request)
         forecast = json.loads(forecast_response.text)
 
@@ -2517,8 +2517,6 @@ class MusicBot(discord.Client):
 
         print(channel.id)
         print ('311565508652564490')
-        CLIENT_ID = "c3a1e4d2c729d75"
-        ACCESS_TOKEN = '31e4e81dd7f6e38443dbb9d05219f074afacd1ad'
         header = {'authorization': 'Client-ID ' + CLIENT_ID}
         auth_header = {'authorization': 'Bearer ' + ACCESS_TOKEN}
 
@@ -2742,9 +2740,9 @@ class MusicBot(discord.Client):
         from urllib.request import urlopen
         import json
 
-        API_KEY = "dKwKU0ZoUl9iETXEURBd8bddOvAIFT01"
 
-        # fucking crazy but it works
+
+        # this is incredibly retarded, PLEASE fix it sometime later
         async def trending():
             for k in rjson['data']:
                 for k2, v2 in k.items():
@@ -2757,7 +2755,7 @@ class MusicBot(discord.Client):
 
         if parameter:
             parameter = ' '.join([parameter, *leftover_args])
-            r = requests.get("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=1&offset=0&rating=G&lang=en".format(API_KEY, parameter))
+            r = requests.get("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=1&offset=0&rating=G&lang=en".format(GIPHY_API_KEY, parameter))
             rjson = json.loads(r.text)
 
             for k, v in rjson['data'][0].items():
@@ -2770,7 +2768,7 @@ class MusicBot(discord.Client):
 
         else:
             await self.safe_send_message(channel, "No search parameter provided, sending random gif.")
-            r = requests.get("https://api.giphy.com/v1/gifs/random?api_key={}&tag=&rating=R".format(API_KEY))
+            r = requests.get("https://api.giphy.com/v1/gifs/random?api_key={}&tag=&rating=R".format(GIPHY_API_KEY))
             rjson = json.loads(r.text)
 
             for k, v in rjson['data'].items():
@@ -2790,6 +2788,208 @@ class MusicBot(discord.Client):
     async def cmd_shittybot(self, author, channel):
         return await self.safe_send_message(channel, "Maybe a little bit but definitely not as much as Mee6")
 
+    async def cmd_eval(self, author, channel, leftover_args, parameter=None):
+        if parameter:
+            args = " ".join([parameter, *leftover_args])
+            print("leftover_args: " + args)
+            evalled = await self.safe_send_message(channel, eval(args))
+            if not evalled:
+                return
+            return evalled
+
+    async def cmd_backup(self):
+
+        pass
+
+    async def cmd_stab(self, author, channel, user_mentions):
+        import random
+        if not user_mentions:
+            return await self.safe_send_message(channel, "Mention a user, I'm not gonna stab myself.")
+        usr = user_mentions[0]
+        count = random.randrange(1, 100)
+        return await self.safe_send_message(channel, "{} just stabbed {} {} times".format(author.name, usr.name, count))
+
+    async def cmd_backup(self, server, channel, author):
+        import datetime
+        import emoji
+        import re
+        text_channels = []
+        voice_channels = []
+        for iterchannel in server.channels:
+            if iterchannel.type == 4:
+                continue
+            elif str(iterchannel.type) == 'voice':
+                voice_channels.append(iterchannel)
+            elif str(iterchannel.type) == 'text':
+                text_channels.append(iterchannel)
+        sendstr = ""
+        text_channels.sort(key=lambda x: x.position)
+        voice_channels.sort(key=lambda x: x.position)
+        for i in text_channels:
+            sendstr += "{}, type: {}, position: {} \n".format(i, i.type, i.position)
+        for i in voice_channels:
+            sendstr += "{}, type: {}, position: {} \n".format(i, i.type, i.position)
+        if sendstr == "":
+            return await self.safe_send_message(channel, "Channel list is empty... for some reason.")
+        server_name = str(server.name.lower()) #  sql only accepts servers with lower case names
+        server_name = re.escape(emoji.demojize(server_name)) #  escaping dumbass emojis and punctuation
+        now = datetime.datetime.now()
+        date = now.strftime("%Y-%m-%d")
+        #date = "2017-11-18"
+        conn = pymysql.connect(
+            host='localhost',
+            port=3306,
+            user='root',
+            passwd=mysql_password,
+            db='discord_channel_backup'
+        )
+        cur = conn.cursor()
+        check_table = "SELECT count(*) FROM information_schema.TABLES WHERE table_name = '{}'".format(re.escape(server_name))
+        cur.execute(check_table)
+        result = cur.fetchone()
+        if '0' in str(result):
+            create_table = "CREATE TABLE `{}`(`channel_name` TEXT, `channel_type` TEXT , `date` VARCHAR(255))".format(server_name)
+            cur.execute(create_table)
+            await self.safe_send_message(channel, "{} was not found on the database but a table for it was successfully created.".format(server.name))
+        elif '1' in str(result):
+            check_date = "SELECT * FROM `{}` WHERE date = '{}'".format(server_name, date)
+            cur.execute(check_date)
+            date_result = cur.fetchall()
+            if date_result:
+                #  checking class
+                return await self.safe_send_message(channel, "All channels were already backed up today.")
+        for i in text_channels:
+            sql = "INSERT INTO `{}`(`channel_name`, `channel_type`, `date`) VALUES('{}','{}','{}')".format(server_name, i.name, i.type, date)
+            cur.execute(sql)
+        for i in voice_channels:
+            sql = "INSERT INTO `{}` (`channel_name`, `channel_type`, `date`) VALUES ('{}','{}','{}')".format(
+                server_name, i.name, i.type, date)
+            cur.execute(sql)
+        conn.commit()
+        conn.close()
+        # checking users
+        """ 
+        conn = pymysql.connect(
+            host='localhost',
+            port=3306,
+            user='root',
+            passwd=mysql_password,
+            db='discord_user_backup'
+        )
+        cur = conn.cur()
+        users = server.members
+        check_table = "SELECT count(*) FROM information_schema.TABLES WHERE table_name = '{}'".format(
+            re.escape(server_name))
+        cur.execute(check_table)
+        result = cur.fetchone()
+        if '0' in str(result):
+            create_table = "CREATE TABLE `{}`(`username` TEXT, `discordID` TEXT , `date` VARCHAR(255))".format(
+                server_name)
+            cur.execute(create_table)
+            await self.safe_send_message(channel,
+                                         "{} was not found on the database but a table for it was successfully created.".format(
+                                             server.name))
+        elif '1' in str(result):
+            check_date = "SELECT * FROM `{}` WHERE date = '{}'".format(server_name, date)
+            cur.execute(check_date)
+            date_result = cur.fetchall()
+            if date_result:
+                #  checking class
+                return await self.safe_send_message(channel, "All users were already backed up today.")
+        for i in users:
+            sql = "INSERT INTO `{}`('','')"
+        """
+        await self.safe_send_message(channel, "Backed server up successfully! :thumbsup:")
+
+    async def cmd_date(self, channel):
+        import datetime
+        now = datetime.datetime.now()
+        newdate = now.strftime("%Y/%m/%d")
+        return await self.safe_send_message(channel, "The date is: " + str(newdate))
+    async def cmd_server(self, server, channel):
+        import emoji
+        servername =  str(server.name.lower())
+        print(emoji.demojize(servername))
+        return await self.safe_send_message(channel, str(server.name.lower()))
+
+    async def cmd_check(self, server, channel, author):
+        import re
+        import emoji
+        from texttable import Texttable
+        from terminaltables import AsciiTable
+        conn = pymysql.connect(
+            host='localhost',
+            port=3306,
+            user='root',
+            passwd=mysql_password,
+            db='discord_channel_backup'
+        )
+        server_name = str(server.name.lower())  # sql only accepts servers with lower case names
+        server_name = emoji.demojize(server_name)  # escaping dumbass emojis and punctuation
+
+        cur = conn.cursor()
+        search_query = "SELECT DISTINCT date FROM `{}` ".format(re.escape(server_name))
+        cur.execute(search_query)
+
+        dates = cur.fetchall()
+        print(dates)
+        all_backups = {}
+        for i in dates:
+            print(i[0])
+            channel_count = "SELECT count(*) FROM `{}` WHERE date = '{}'".format(re.escape(server_name), i[0])
+            cur.execute(channel_count)
+            channel_count = cur.fetchall()
+            for count in channel_count:
+                all_backups[i[0]] = [count[0]]
+
+        table = Texttable()
+        table.set_cols_align(["l", "r"])
+        table.set_cols_valign(["m", "m"])
+        dumptable = []
+        for i, (k, v) in enumerate(all_backups.items()):
+            sub = []
+            sub.append(i+1)
+            sub.append(k)
+            sub.append(*v)
+            dumptable.append(sub)
+        print(*dumptable)
+
+        rows = [["Number", "Backup Date", "# of Channels"], *dumptable]
+        table = AsciiTable(rows)
+        conn.close()
+        print(table.table)
+        await self.safe_send_message(channel, "```{}```".format(table.table))
+        await self.safe_send_message(channel, "Dates are shown in ISO 8601 format to avoid confusion YYYY/MM/DD\nWrite the number of the backup you wish to select")
+
+        response_message = await self.wait_for_message(30, author=author, channel=channel)
+        if not response_message.content.isdigit():
+            return await self.safe_send_message(channel, "You did not enter a valid number.")
+
+        channels_to_restore = {}
+        for i in dumptable:
+            print(response_message.content)
+            print(i[0])
+            if response_message.content == i[0]: #  selected date found
+                selected_date = i[1]
+                channel_name_query = "SELECT channel_name FROM `{}` WHERE date = '{}'".format(re.escape(server_name), selected_date)
+                cur.execute(channel_name_query)
+                channel_names = cur.fetchall()
+                channel_types_query = "SELECT channel_type FROM `{}` WHERE date = {}".format(re.escape(server_name), selected_date)
+                cur.execute(channel_types_query)
+                channel_types = cur.fetchall()
+                for elem in range(channel_names):
+                    channels_to_restore[channel_names[elem]] = channel_types[elem]
+        # deleting matching
+        for i in server.channels:
+            for k, v in channels_to_restore.items():
+                if i.name == k:
+                    channels_to_restore.pop(k, None)
+        await self.safe_send_message(channel, channels_to_restore)
+
+        #for k,v in channels_to_restore.items():
+        #    self.create_channel(server, k, v)
+
+        # return await self.safe_send_message(channel,)
 
 if __name__ == '__main__':
     bot = MusicBot()
