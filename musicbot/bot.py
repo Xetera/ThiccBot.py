@@ -596,6 +596,7 @@ class MusicBot(discord.Client):
             vc.main_ws = self.ws
 
     async def on_ready(self):
+
         print('\rConnected!  Musicbot v%s\n' % BOTVERSION)
 
         if self.config.owner_id == self.user.id:
@@ -1847,8 +1848,9 @@ class MusicBot(discord.Client):
             for row in cur:
 
                 if 'node' in row:
-                    return await self.safe_send_message(message.channel, "I'd have to know JavaScript to run this "
-                                                                         "command, ask <@372615866652557312> instead.")
+                    return await self.safe_send_message(message.channel,
+                                                        "You entered a valid command but I don't know "
+                                                        "how to run it, ask <@372615866652557312> instead.")
                 else:
                     return print(command + " doesn't exist on any bot.")
             conn.close()
@@ -1988,21 +1990,30 @@ class MusicBot(discord.Client):
 
         current_time = datetime.now().strftime("%H:%M %Y-%m-%d ")
 
+        channel_names = []
+        server_selection = None
         for channel in after.server.channels:
-            if channel.name == "logs":
-                self.server_selection = channel
+            channel_names.append(channel.name)
+
+        if "logs" not in channel_names:
+            return print("There was a voice activity in {} but there was no logs channel found.".format(after.server.name))
+        else:
+            for channel in after.server.channels:
+                if channel.name == "logs":
+                    server_selection = channel
+
         if before.voice_channel is None:
-            await self.safe_send_message(self.server_selection,
+            await self.safe_send_message(server_selection,
                                          "```nginx\n{} joined {} at {} (California Time)\n```".format(after.name, after.voice_channel, current_time))
         elif after.voice_channel is None:
-            await self.safe_send_message(self.server_selection, "```nginx\n{} disconnected from {} at {} (California Time)\n```"
+            await self.safe_send_message(server_selection, "```nginx\n{} disconnected from {} at {} (California Time)\n```"
                                          .format(after.name, before.voice_channel, current_time))
         # voice state is triggered when user mutes but doesn't change channels, don't display that
 
         elif before.voice_channel == after.voice_channel:
             return
         else:
-            await self.safe_send_message(self.server_selection,
+            await self.safe_send_message(server_selection,
                                          "```nginx\n{} switched from {} to {} at {} (California Time)\n```".format(after.name, before.voice_channel, after.voice_channel, current_time))
 
         print("{} joined {} at {} my time".format(after.name, after.voice_channel, current_time))
@@ -2065,17 +2076,22 @@ class MusicBot(discord.Client):
         import json
         import requests
         from datetime import datetime
-        contact_message = self.safe_send_message(channel, "Contacting OpenWeatherMap...")
+        contact_message = await self.safe_send_message(channel, "Contacting OpenWeatherMap...")
 
         city_name_url = "http://api.openweathermap.org/data/2.5/weather?q="
         units = "&units=metric"
         if not city_name:
             return Response('Please enter a city after {}weather'.format(self.config.command_prefix), delete_after=20)
         city = ' '.join([city_name, *leftover_args])
-        print(type(city))
+        print((city))
         urlrequest = city_name_url + city + units + weather_api_key
         response = requests.get(urlrequest)
         data = json.loads(response.text)
+        print(data)
+        if data['cod'] == '404':
+            await self.safe_delete_message(contact_message)
+            return await self.safe_send_message(channel, "Could not find a city named {}.".format(city))
+
         cityID = data['id']
         #  getting forecast data
         forecast_url = "http://api.openweathermap.org/data/2.5/forecast?id="
@@ -2115,11 +2131,11 @@ class MusicBot(discord.Client):
         weather_embed.add_field(name='Humidity', value="{} %".format(main['humidity']), inline=True)
         weather_embed.add_field(name='Pressure', value="{} kPa".format(main['pressure']/10), inline=True)
         for i in range(len(forecast_array)):
-            weather_embed.add_field(name="Forecast for {}".format(date_array[i]), value="{}:\n{}\n{}:\n{} °C"
-                                    .format("Description", forecast_array[i].title(), "Temperature", temperature_array[i]), inline=True)
+            weather_embed.add_field(name="Forecast for {}".format(date_array[i]), value="{}\n{} °C"
+                                    .format(forecast_array[i].title(), temperature_array[i]), inline=True)
 
         await discord.Client.send_message(self, destination=channel, embed=weather_embed)
-        self.safe_delete_message(contact_message)
+        await self.safe_delete_message(contact_message)
 
     async def cmd_coin(self, channel,author):
         import random
@@ -2227,6 +2243,9 @@ class MusicBot(discord.Client):
             await self.safe_delete_message(answer)
 
 
+    async def cmd_website(self, channel):
+        return await self.safe_send_message(channel, "Login: http://68.4.235.189:8080/\nGame: http://68.4.235.189:8080/Game/landing.php#")
+
     async def cmd_mari(self):
         return Response("Pika Pika!")
 
@@ -2249,10 +2268,6 @@ class MusicBot(discord.Client):
 
 ################ COOKIES ##############################################################################################
 
-    async def _cmd_get_user_cookies(self):
-        pass
-
-
     async def cmd_cookies(self, channel):
         import sqlite3
         from texttable import Texttable
@@ -2268,7 +2283,9 @@ class MusicBot(discord.Client):
         table.set_cols_valign(["m", "m"])
         table.add_rows([["User", "Cookies"], *result])
 
-        return Response("```{}```".format(table.draw()))
+        Response("```{}```".format(table.draw()))
+        return await self.safe_send_message(channel, "If you actually use this command and it's too long and annoying "
+                                                     ", complain to <@{}>". format(self.config.owner_id))
 
 
 
@@ -2710,11 +2727,9 @@ class MusicBot(discord.Client):
                 break
 
         soup = BeautifulSoup(r.text, "html.parser")
-
         imgs = soup.find("img", {"id": "main-comic"})
 
         link = imgs['src']
-
         ximg = link.split("//")[1]
         ximg = ("http://{}".format(ximg))
 
@@ -2740,51 +2755,54 @@ class MusicBot(discord.Client):
         from urllib.request import urlopen
         import json
 
+        wait_message = await self.safe_send_message(channel, "Attempting to download the highest quality GIF from GIPHY...\n"
+                                                             "This might take a bit depending on how big the gif is.")
+        # such fucking spaghetti code
 
+        async def sendgif(parameter, withparameter, withoutparameter):
+            if parameter:
+                parameter = ' '.join([parameter, *leftover_args])
+                r = requests.get("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=1&offset=0&rating=G&lang"
+                                 "=en".format(GIPHY_API_KEY, parameter))
+                rjson = json.loads(r.text)
 
-        # this is incredibly retarded, PLEASE fix it sometime later
-        async def trending():
-            for k in rjson['data']:
-                for k2, v2 in k.items():
-                    if k2 == "images":
-                        for k3, v3 in v2.items():
-                            if k3 == "fixed_height_downsampled":
-                                for k4, v4 in v3.items():
-                                    if k4 == "url":
-                                        return v4
+                self.giphyurl = rjson['data'][0]['images'][withparameter]['url']
+            else:
+                no_param = await self.safe_send_message(channel, "No search parameter provided, sending random gif.")
+                r = requests.get("https://api.giphy.com/v1/gifs/random?api_key={}&tag=&rating=R".format(GIPHY_API_KEY))
+                rjson = json.loads(r.text)
 
-        if parameter:
-            parameter = ' '.join([parameter, *leftover_args])
-            r = requests.get("https://api.giphy.com/v1/gifs/search?api_key={}&q={}&limit=1&offset=0&rating=G&lang=en".format(GIPHY_API_KEY, parameter))
-            rjson = json.loads(r.text)
+                for k, v in rjson['data'].items():
+                    if k == withoutparameter:
+                        self.giphyurl = v
 
-            for k, v in rjson['data'][0].items():
-                if k == "images":
-                    for k2, v2 in v.items():
-                        if k2 == "fixed_height_downsampled":
-                            for k3, v3 in v2.items():
-                                if k3 == "url":
-                                    self.giphyurl = v3
+            with urlopen(self.giphyurl) as URL:
+                with open('giphy.gif', 'wb') as f:
+                    f.write(URL.read())
+                    await discord.Client.send_file(self, channel, self.dirname + "\\giphy.gif")
+                    f.close()
+                    os.remove('giphy.gif')
 
-        else:
-            await self.safe_send_message(channel, "No search parameter provided, sending random gif.")
-            r = requests.get("https://api.giphy.com/v1/gifs/random?api_key={}&tag=&rating=R".format(GIPHY_API_KEY))
-            rjson = json.loads(r.text)
+            try:
+                await self.safe_delete_message(no_param)
+            except UnboundLocalError: # bad practice passing exceptions but in this case it doesn't really matter
+                pass
+            await self.safe_delete_message(wait_message)
+        try:
+            await sendgif(parameter, 'original', 'image_original_url')
 
-            for k, v in rjson['data'].items():
-                if k == "fixed_height_downsampled_url":
-                    self.giphyurl = v
-
-
-
-        with urlopen(self.giphyurl) as URL:
-            with open('giphy.gif', 'wb') as f:
-                f.write(URL.read())
-                await discord.Client.send_file(self, channel, self.dirname + "\\giphy.gif")
-                f.close()
-                os.remove('giphy.gif')
-
-
+        except discord.errors.HTTPException:  # file too big
+            compress = await self.safe_send_message(channel, "I found a gif but it was too big to send, trying to "
+                                                             "compress it.")
+            await self.safe_delete_message(wait_message)
+            try:
+                await sendgif(parameter, 'downsized_medium', 'fixed_width_small_url')
+                await self.safe_delete_message(compress)
+            except discord.errors.HTTPException: # file STILL too big
+                await self.safe_delete_message(compress)
+                await self.safe_send_message(channel, "Either something is wrong with Discord or even the compressed"
+                                                      " version of this gif is still too large to send, bummer.")
+                return
     async def cmd_shittybot(self, author, channel):
         return await self.safe_send_message(channel, "Maybe a little bit but definitely not as much as Mee6")
 
@@ -2797,9 +2815,6 @@ class MusicBot(discord.Client):
                 return
             return evalled
 
-    async def cmd_backup(self):
-
-        pass
 
     async def cmd_stab(self, author, channel, user_mentions):
         import random
@@ -2809,28 +2824,44 @@ class MusicBot(discord.Client):
         count = random.randrange(1, 100)
         return await self.safe_send_message(channel, "{} just stabbed {} {} times".format(author.name, usr.name, count))
 
-    async def cmd_backup(self, server, channel, author):
-        import datetime
-        import emoji
-        import re
+    async def ordered_channels(self, inputserver):
         text_channels = []
         voice_channels = []
-        for iterchannel in server.channels:
+        for iterchannel in inputserver.channels:
+            print("{}, type: {}, position: {} \n".format(iterchannel.name, iterchannel.type, iterchannel.position))
             if iterchannel.type == 4:
                 continue
             elif str(iterchannel.type) == 'voice':
                 voice_channels.append(iterchannel)
             elif str(iterchannel.type) == 'text':
                 text_channels.append(iterchannel)
-        sendstr = ""
         text_channels.sort(key=lambda x: x.position)
         voice_channels.sort(key=lambda x: x.position)
+        array = [text_channels, voice_channels]
+        return array
+
+
+    async def cmd_backup(self, server, channel, author):
+        """
+        Usage: {cmd_prefix}backup
+
+        Backs up the server's users and channels to later reroll to.
+        To preserve the order of the channels when rerolling, keep voice channels under text channels.
+        """
+        import datetime
+        import emoji
+        import re
+        returnarray = await self.ordered_channels(server)
+        text_channels = returnarray[0]
+        voice_channels = returnarray[1]
+        sendstr = ""
         for i in text_channels:
             sendstr += "{}, type: {}, position: {} \n".format(i, i.type, i.position)
         for i in voice_channels:
             sendstr += "{}, type: {}, position: {} \n".format(i, i.type, i.position)
         if sendstr == "":
             return await self.safe_send_message(channel, "Channel list is empty... for some reason.")
+        print(sendstr)
         server_name = str(server.name.lower()) #  sql only accepts servers with lower case names
         server_name = re.escape(emoji.demojize(server_name)) #  escaping dumbass emojis and punctuation
         now = datetime.datetime.now()
@@ -2848,9 +2879,9 @@ class MusicBot(discord.Client):
         cur.execute(check_table)
         result = cur.fetchone()
         if '0' in str(result):
-            create_table = "CREATE TABLE `{}`(`channel_name` TEXT, `channel_type` TEXT , `date` VARCHAR(255))".format(server_name)
+            create_table = "CREATE TABLE `{}`(`channel_name` TEXT, `channel_type` TEXT , `position` INT, `date` VARCHAR(255))".format(server_name)
             cur.execute(create_table)
-            await self.safe_send_message(channel, "{} was not found on the database but a table for it was successfully created.".format(server.name))
+            await self.safe_send_message(channel, "{} was not found on the database but a save file for it was successfully created.".format(server.name))
         elif '1' in str(result):
             check_date = "SELECT * FROM `{}` WHERE date = '{}'".format(server_name, date)
             cur.execute(check_date)
@@ -2859,11 +2890,11 @@ class MusicBot(discord.Client):
                 #  checking class
                 return await self.safe_send_message(channel, "All channels were already backed up today.")
         for i in text_channels:
-            sql = "INSERT INTO `{}`(`channel_name`, `channel_type`, `date`) VALUES('{}','{}','{}')".format(server_name, i.name, i.type, date)
+            sql = "INSERT INTO `{}`(`channel_name`, `channel_type`, `position`, `date`) VALUES('{}','{}','{}','{}')".format(server_name, i.name, i.type, i.position, date)
             cur.execute(sql)
         for i in voice_channels:
-            sql = "INSERT INTO `{}` (`channel_name`, `channel_type`, `date`) VALUES ('{}','{}','{}')".format(
-                server_name, i.name, i.type, date)
+            sql = "INSERT INTO `{}` (`channel_name`, `channel_type`, `position`,`date`) VALUES ('{}','{}','{}','{}')".format(
+                server_name, i.name, i.type, i.position, date)
             cur.execute(sql)
         conn.commit()
         conn.close()
@@ -2906,11 +2937,6 @@ class MusicBot(discord.Client):
         now = datetime.datetime.now()
         newdate = now.strftime("%Y/%m/%d")
         return await self.safe_send_message(channel, "The date is: " + str(newdate))
-    async def cmd_server(self, server, channel):
-        import emoji
-        servername =  str(server.name.lower())
-        print(emoji.demojize(servername))
-        return await self.safe_send_message(channel, str(server.name.lower()))
 
     async def cmd_check(self, server, channel, author):
         import re
@@ -2941,7 +2967,6 @@ class MusicBot(discord.Client):
             channel_count = cur.fetchall()
             for count in channel_count:
                 all_backups[i[0]] = [count[0]]
-
         table = Texttable()
         table.set_cols_align(["l", "r"])
         table.set_cols_valign(["m", "m"])
@@ -2956,40 +2981,68 @@ class MusicBot(discord.Client):
 
         rows = [["Number", "Backup Date", "# of Channels"], *dumptable]
         table = AsciiTable(rows)
-        conn.close()
         print(table.table)
         await self.safe_send_message(channel, "```{}```".format(table.table))
-        await self.safe_send_message(channel, "Dates are shown in ISO 8601 format to avoid confusion YYYY/MM/DD\nWrite the number of the backup you wish to select")
+        await self.safe_send_message(channel, "[Backup]: Dates are shown in ISO 8601 format to avoid confusion YYYY/MM/DD\n[Backup]: Write the number of the backup you wish to select")
 
         response_message = await self.wait_for_message(30, author=author, channel=channel)
         if not response_message.content.isdigit():
-            return await self.safe_send_message(channel, "You did not enter a valid number.")
+            return await self.safe_send_message(channel, "[Backup]: You did not enter a valid number.")
 
         channels_to_restore = {}
+        selected_date = ""
         for i in dumptable:
             print(response_message.content)
             print(i[0])
-            if response_message.content == i[0]: #  selected date found
+            if str(response_message.content) == str(i[0]): #  selected date found
+                print(i[1])
                 selected_date = i[1]
-                channel_name_query = "SELECT channel_name FROM `{}` WHERE date = '{}'".format(re.escape(server_name), selected_date)
-                cur.execute(channel_name_query)
-                channel_names = cur.fetchall()
-                channel_types_query = "SELECT channel_type FROM `{}` WHERE date = {}".format(re.escape(server_name), selected_date)
-                cur.execute(channel_types_query)
-                channel_types = cur.fetchall()
-                for elem in range(channel_names):
-                    channels_to_restore[channel_names[elem]] = channel_types[elem]
-        # deleting matching
-        for i in server.channels:
-            for k, v in channels_to_restore.items():
-                if i.name == k:
-                    channels_to_restore.pop(k, None)
-        await self.safe_send_message(channel, channels_to_restore)
+        if selected_date == "":
+            return await self.safe_send_message(channel, "There was a problem fetching dates from MySQL.")
+        cur = conn.cursor()
+        channel_name_query = "SELECT channel_name, channel_type, position FROM `{}` WHERE date = '{}' ORDER BY position ASC".format(re.escape(server_name), selected_date)
+        cur.execute(channel_name_query)
+        channel_names = cur.fetchall()
+        text_channels = []
+        voice_channels = []
+        for x in channel_names:
+            print(x[2])
+            if str(x[2]) == 'text':
+                text_channels.append(x)
+            elif str(x[2]) == 'voice':
+                voice_channels.append(x)
+        print(channel_names)
+        print(text_channels)
+        for elem in range(len(text_channels)):
+            print("element")
+            print(channels_to_restore)
+            channels_to_restore[text_channels[elem][0]] = text_channels[elem][1]
+        for elem in range(len(voice_channels)):
+            channels_to_restore[voice_channels[elem][0]] = voice_channels[elem][1]
+        returnarray = await self.ordered_channels(server)
+        current_channels = []
+        text_channels = returnarray[0]
+        voice_channels = returnarray[1]
+        for i in text_channels:
+            current_channels.append(i.name)
+        for i in voice_channels:
+            current_channels.append(i.name)
+        print(current_channels)
+        print(channels_to_restore)
+        final = {k: v for k, v in channels_to_restore.items() if k not in current_channels}
+        print(final)
+        if not final:
+            await self.safe_send_message(channel, "No missing channels found.")
+        #  deleting matching
+        #  for i in server.channels:
+        print(channels_to_restore)
+        #  await self.safe_send_message(channel, final)
 
-        #for k,v in channels_to_restore.items():
+        #  for k,v in channels_to_restore.items():
         #    self.create_channel(server, k, v)
 
         # return await self.safe_send_message(channel,)
+
 
 if __name__ == '__main__':
     bot = MusicBot()
