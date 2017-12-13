@@ -10,6 +10,7 @@ import asyncio
 import traceback
 
 import pymysql
+from . import memes
 
 from discord import utils
 from discord.object import Object
@@ -35,7 +36,9 @@ from . import downloader
 from .opus_loader import load_opus_lib
 from .constants import VERSION as BOTVERSION
 from .constants import DISCORD_MSG_CHAR_LIMIT, AUDIO_CACHE_PATH
+
 from .secret import *
+
 load_opus_lib()
 
 
@@ -3043,6 +3046,26 @@ class MusicBot(discord.Client):
 
         # return await self.safe_send_message(channel,)
 
+    async def cmd_deletdis(self, channel):
+        await self.safe_send_message(channel, "You were banned for using the word 'Nigger'")
+
+    async def cmd_universe(self, channel, leftover_args):
+        import os
+        scriptDir = os.path.dirname(__file__)
+
+        args = ' '.join(leftover_args)
+        print(args)
+        newargs = args.split(',')
+        print(newargs)
+        if len(newargs) != 4:
+            return await self.safe_send_message\
+                (channel,
+                 "This command currently only supports 4"
+                 " frame memes, yours has {} arguments (separate them with commas)".format(len(newargs)))
+        brain = memes.Brain()
+        brain.generate_meme(newargs)
+        brain.settext4(newargs)
+        await discord.Client.send_file(self, channel, scriptDir + '\\meme_folder\\test.jpg')
 
 if __name__ == '__main__':
     bot = MusicBot()
