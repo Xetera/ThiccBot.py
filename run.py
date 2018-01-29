@@ -228,6 +228,6 @@ if __name__ == '__main__':
     while True:
         main()
 
-        ThreadedServer('68.4.235.189', 8080).listen()
+        #ThreadedServer('68.4.235.189', 8080).listen()
 
 

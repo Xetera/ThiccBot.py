@@ -3080,11 +3080,11 @@ class MusicBot(discord.Client):
 		await self.safe_send_message(channel, talk + "\n" + idle +'\n'+  online)
 
 	async def whatsapp(self):
-		import threading
-		await self.wait_until_ready()
-		self.thd = ThreadedServer('68.4.235.189', 8080, self)
-		threading.Thread(target=self.thd.listen).start()
-
+		#import threading
+		#await self.wait_until_ready()
+		#self.thd = ThreadedServer('68.4.235.189', 8080, self)
+		#threading.Thread(target=self.thd.listen).start()
+		pass
 
 	async def fetch_whatsapp_info(self):
 		# getting the whatsapp discord server
